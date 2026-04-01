@@ -1,0 +1,48 @@
+# ==== 		Logs 			====
+*.log
+.cache/
+
+
+
+# ==== 		JetBrains IDEs 		====
+.idea/
+*.iml
+*.ipr
+*.iws
+
+
+# ==== 		VS Code 		====
+.vscode/
+*.code-workspace
+
+
+# ==== 		CLion / CMake 		====
+cmake-build-*/
+cmake-build-debug/
+build/
+
+
+# ==== 		MATLAB 			====
+*.asv
+
+
+# ==== 		Python 			====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# ==== 		macOS system files 	====
+.DS_Store
+
+
+
+# ==== 		General IDE/editor 	====
+.workspace
+.settings/
+.project
+.metadata/
+.history/
+
+
