@@ -32,6 +32,7 @@ class SVM_LOGIC:
                  working_file_name: Path,
                  log_dir: Path,
                  log_file_name: Path,
+                 visual_dir: Path = Path("outputs") / "SVM_LOGI",
                  model_type: str = 'SVM'):
         self.__data_dir = data_dir
         self.__log_dir = log_dir
@@ -43,6 +44,8 @@ class SVM_LOGIC:
         # self.__cat_list = ['investor_type', 'sector', 'founder_background']
         self.__feature_names = None
         self.__scaler = StandardScaler()
+        self.__output_dir = base_dir / visual_dir
+        self.__output_dir.mkdir(parents=True, exist_ok=True)
     
     # def set_cat_list(self, cat_list):
     #     self.__cat_list = cat_list
@@ -182,6 +185,18 @@ class SVM_LOGIC:
         # ---- VISUAL EVALUATION ----
         self.__evaluate_and_plot(model, X_test, y_test)
         
+        results = {
+                       "model"     : self.__model_type,
+                       "best_C"    : best_C,
+                       "val_score" : best_score,
+                       "test_score": test_score,
+                       "f1_macro"  : f1_score(y_test, model.predict(X_test), average='macro')
+                  }
+        
+        pd.DataFrame([results]).to_csv(self.__output_dir / f"{self.__model_type}_results.csv", index=False)
+        
+        
+        
         if self.__model_type == 'LOGISTIC':
             coef = model.coef_[0]
             importance = pd.Series(coef, index=self.__feature_names)
@@ -195,7 +210,8 @@ class SVM_LOGIC:
             plt.gca().invert_yaxis()
             plt.title("Top Logistic Features")
             plt.tight_layout()
-            plt.show()
+            plt.savefig(self.__output_dir / "logistic_feature_importance.pdf", dpi=300)
+            plt.close()
             
         # ---- LOG FINAL ----
         log_records.append(
@@ -249,14 +265,16 @@ class SVM_LOGIC:
             PrecisionRecallDisplay.from_predictions(y_test, y_prob)
             plt.title(f"{self.__model_type} Precision-Recall Curve")
             plt.grid()
-            plt.show()
+            plt.savefig(self.__output_dir / f"{self.__model_type}_pr_curve.pdf", dpi=300)
+            plt.close()
+            
         
         # ------------------------------
         # Confusion Matrix
         # ------------------------------
         cm = confusion_matrix(y_test, y_pred)
         
-        plt.figure(figsize=(5, 4))
+        plt.figure(figsize=(16, 9))
         sns.heatmap(cm,
                     annot=True,
                     fmt='d',
@@ -269,7 +287,9 @@ class SVM_LOGIC:
         plt.ylabel("Actual")
         plt.title(f"{self.__model_type} Confusion Matrix")
         plt.tight_layout()
-        plt.show()
+        plt.savefig(self.__output_dir / f"{self.__model_type}_cm.pdf", dpi=300)
+        plt.close()
+        
         
         # ------------------------------
         # ROC Curve
@@ -279,8 +299,17 @@ class SVM_LOGIC:
             RocCurveDisplay.from_predictions(y_test, y_prob)
             plt.title(f"{self.__model_type} ROC Curve")
             plt.grid()
-            plt.show()
-            
+            plt.savefig(self.__output_dir / f"{self.__model_type}_roc.pdf", dpi=300)
+            plt.close()
+        
+        report = classification_report(
+                y_test, y_pred,
+                target_names=['closed', 'acquired']
+        )
+        
+        with open(self.__output_dir / f"{self.__model_type}_report.txt", "w") as f:
+            f.write(report)
+
 
 def main():
     data_dir = base_dir / Path("data")
@@ -295,16 +324,16 @@ def main():
                           model_type='SVM')
     model_SVM.print_column_name()
     model_SVM.print_outcome()
-    #
-    # model_LOGI = SVM_LOGIC(data_dir=data_dir,
-    #                        working_file_name=working_file_name,
-    #                        log_dir=log_dir,
-    #                        log_file_name = Path('LOGISTIC_log.csv'),
-    #                        model_type='LOGISTIC')
-    #
+
+    model_LOGI = SVM_LOGIC(data_dir=data_dir,
+                           working_file_name=working_file_name,
+                           log_dir=log_dir,
+                           log_file_name = Path('LOGISTIC_log.csv'),
+                           model_type='LOGISTIC')
+
     
     model_SVM.train(C_list=np.arange(1, 10))
-    # model_LOGI.train(C_list=(2, 3))
+    model_LOGI.train(C_list=(2, 3))
 
 if __name__ == '__main__':
     main()
