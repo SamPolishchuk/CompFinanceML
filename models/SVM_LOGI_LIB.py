@@ -9,6 +9,18 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
+from sklearn.metrics import (
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+    classification_report,
+    f1_score,
+    roc_auc_score,
+    RocCurveDisplay,
+    PrecisionRecallDisplay
+)
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 base_dir  = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(base_dir))
 
@@ -20,6 +32,7 @@ class SVM_LOGIC:
                  working_file_name: Path,
                  log_dir: Path,
                  log_file_name: Path,
+                 visual_dir: Path = Path("outputs") / "SVM_LOGI",
                  model_type: str = 'SVM'):
         self.__data_dir = data_dir
         self.__log_dir = log_dir
@@ -28,22 +41,28 @@ class SVM_LOGIC:
         self.__data_pd = pd.read_csv(self.__working_file, index_col=0).copy(deep=True)
         self.__log_dir.mkdir(exist_ok=True)
         self.__model_type = model_type.upper()
-        self.__cat_list = ['investor_type', 'sector', 'founder_background']
+        # self.__cat_list = ['investor_type', 'sector', 'founder_background']
+        self.__feature_names = None
+        self.__scaler = StandardScaler()
+        self.__output_dir = base_dir / visual_dir
+        self.__output_dir.mkdir(parents=True, exist_ok=True)
     
-    def set_cat_list(self, cat_list):
-        self.__cat_list = cat_list
+    # def set_cat_list(self, cat_list):
+    #     self.__cat_list = cat_list
 
     def __get_model(self, C: float):
 
         if self.__model_type == 'SVM':
-            return SVC(C=C, class_weight='balanced')
+            return SVC(C=C, class_weight='balanced', probability=True, random_state=1)
         
         elif self.__model_type == 'LOGISTIC':
             return LogisticRegression(C=C,
                                       class_weight='balanced',
-                                      max_iter=1000)
+                                      max_iter=1000,
+                                      random_state=1)
         return None
-        
+
+
     def __get_column_stats(self):
         for col in self.__data_pd.columns:
             print(f"\n===== {col} =====")
@@ -52,20 +71,37 @@ class SVM_LOGIC:
             dist['probability'] = dist['count'] / dist['count'].sum()
             print(dist)
 
-    def __print_column_name(self):
+    def print_column_name(self):
         print(self.__data_pd.columns.to_list())
+        
+    def print_outcome(self):
+        print(self.__data_pd['outcome'].unique())
         
     def __get_data_shape(self):
         print(f'(row, col) = {self.__data_pd.shape}')
-        
+    
     def __get_label(self):
-        y = self.__data_pd['outcome'].map({'Failure'    : -1,
-                                           'Acquisition': 1,
-                                           'IPO'        : 1})
+        
+        y = self.__data_pd['outcome']
+        
+        # map explicitly (safe + clear)
+        y = y.map(
+                 {
+                     'closed': 0,
+                     'acquired': 1
+                 }
+        )
+        
+        assert not pd.isna(y).any(), "Label mapping failed (unknown labels found)"
+        
         return y
-
+    
     def __get_clean_data(self):
-        X = pd.get_dummies(self.__data_pd.drop(columns=['outcome']), columns= self.__cat_list)
+        X = self.__data_pd.drop(columns=['outcome']).copy()
+        
+        # ensure numeric
+        X = X.apply(pd.to_numeric, errors='coerce').fillna(0)
+        
         self.__feature_names = X.columns
         return X
 
@@ -75,13 +111,18 @@ class SVM_LOGIC:
         X_np = X.values
         y_np = y.values
 
-        X_train, X_temp, y_train, y_temp = train_test_split(X_np, y_np, test_size=0.3, random_state=1)
-        X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=1 / 3, random_state=1)
+        X_train, X_temp, y_train, y_temp = train_test_split(X_np, y_np,
+                                                            test_size=0.3, random_state=1,
+                                                            stratify = y_np
+                                                            )
+        X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp,
+                                                        test_size=1 / 3, random_state=1,
+                                                        stratify=y_temp
+                                                        )
 
-        scaler = StandardScaler()
-        X_train = scaler.fit_transform(X_train)
-        X_val = scaler.transform(X_val)
-        X_test = scaler.transform(X_test)
+        X_train = self.__scaler.fit_transform(X_train)
+        X_val = self.__scaler.transform(X_val)
+        X_test = self.__scaler.transform(X_test)
 
         return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -94,6 +135,7 @@ class SVM_LOGIC:
         
         best_C, best_score = None, -np.inf
         
+        best_model = None
         for C in C_list:
             print(f"[{self.__model_type}] Training with C = {C}")
             
@@ -117,7 +159,10 @@ class SVM_LOGIC:
             )
             
             if val_score > best_score:
-                best_C, best_score = C, val_score
+                best_C = C
+                best_score = val_score
+                best_model = model
+                
                 print(f'save best_C: {best_C}')
             
             if C != C_list[-1]:
@@ -126,7 +171,7 @@ class SVM_LOGIC:
                 print('Exist training loop.')
         
         # ---- FINAL MODEL ----
-        model = self.__get_model(best_C)
+        model = best_model
         model.fit(X_train, y_train)
         
         test_score = model.score(X_test, y_test)
@@ -135,8 +180,39 @@ class SVM_LOGIC:
         print(f'Best C     : {best_C}')
         print(f'Val score  : {best_score:.4f}')
         print(f'Test score : {test_score:.4f}')
-        print("==============================")
+        print("\n==============================\n")
         
+        # ---- VISUAL EVALUATION ----
+        self.__evaluate_and_plot(model, X_test, y_test)
+        
+        results = {
+                       "model"     : self.__model_type,
+                       "best_C"    : best_C,
+                       "val_score" : best_score,
+                       "test_score": test_score,
+                       "f1_macro"  : f1_score(y_test, model.predict(X_test), average='macro')
+                  }
+        
+        pd.DataFrame([results]).to_csv(self.__output_dir / f"{self.__model_type}_results.csv", index=False)
+        
+        
+        
+        if self.__model_type == 'LOGISTIC':
+            coef = model.coef_[0]
+            importance = pd.Series(coef, index=self.__feature_names)
+            importance = importance.sort_values(key=abs, ascending=False)
+            
+            print("\n===== Top Features =====")
+            print(importance.head(15))
+            
+            plt.figure(figsize=(6, 4))
+            importance.head(15).plot(kind='barh')
+            plt.gca().invert_yaxis()
+            plt.title("Top Logistic Features")
+            plt.tight_layout()
+            plt.savefig(self.__output_dir / "logistic_feature_importance.pdf", dpi=300)
+            plt.close()
+            
         # ---- LOG FINAL ----
         log_records.append(
                 {
@@ -162,19 +238,92 @@ class SVM_LOGIC:
             log_df.to_csv(self.__log_file, index=False)
         
         print(f"\nLog saved to: {self.__log_file}")
+    
+    def __evaluate_and_plot(self, model, X_test, y_test):
+        
+        y_pred = model.predict(X_test)
+        
+        # Some models (SVM) need probability=True
+        if hasattr(model, "predict_proba"):
+            y_prob = model.predict_proba(X_test)[:, 1]
+        else:
+            y_prob = None
+        
+        # ------------------------------
+        # Classification report
+        # ------------------------------
+        print("\n===== Classification Report =====")
+        print(classification_report(y_test,
+                                    y_pred,
+                                    target_names=['closed', 'acquired']))
+        
+        print("F1 Macro:", f1_score(y_test, y_pred, average='macro'))
+        
+        if y_prob is not None:
+            print("ROC-AUC:", roc_auc_score(y_test, y_prob))
+            plt.figure(figsize=(5, 4))
+            PrecisionRecallDisplay.from_predictions(y_test, y_prob)
+            plt.title(f"{self.__model_type} Precision-Recall Curve")
+            plt.grid()
+            plt.savefig(self.__output_dir / f"{self.__model_type}_pr_curve.pdf", dpi=300)
+            plt.close()
             
+        
+        # ------------------------------
+        # Confusion Matrix
+        # ------------------------------
+        cm = confusion_matrix(y_test, y_pred)
+        
+        plt.figure(figsize=(16, 9))
+        sns.heatmap(cm,
+                    annot=True,
+                    fmt='d',
+                    cmap='Blues',
+                    xticklabels=['closed', 'acquired'],
+                    yticklabels=['closed', 'acquired']
+                    )
+        
+        plt.xlabel("Predicted")
+        plt.ylabel("Actual")
+        plt.title(f"{self.__model_type} Confusion Matrix")
+        plt.tight_layout()
+        plt.savefig(self.__output_dir / f"{self.__model_type}_cm.pdf", dpi=300)
+        plt.close()
+        
+        
+        # ------------------------------
+        # ROC Curve
+        # ------------------------------
+        if y_prob is not None:
+            plt.figure(figsize=(5, 4))
+            RocCurveDisplay.from_predictions(y_test, y_prob)
+            plt.title(f"{self.__model_type} ROC Curve")
+            plt.grid()
+            plt.savefig(self.__output_dir / f"{self.__model_type}_roc.pdf", dpi=300)
+            plt.close()
+        
+        report = classification_report(
+                y_test, y_pred,
+                target_names=['closed', 'acquired']
+        )
+        
+        with open(self.__output_dir / f"{self.__model_type}_report.txt", "w") as f:
+            f.write(report)
+
 
 def main():
     data_dir = base_dir / Path("data")
     log_dir = base_dir / Path("logging")
     log_dir.mkdir(exist_ok=True)
-    working_file_name = Path('startup_success_dataset.csv')
+    working_file_name = Path('startup_data_cleaned.csv')
 
     model_SVM = SVM_LOGIC(data_dir=data_dir,
                           working_file_name=working_file_name,
                           log_dir=log_dir,
                           log_file_name = Path('SVM_log.csv'),
                           model_type='SVM')
+    model_SVM.print_column_name()
+    model_SVM.print_outcome()
 
     model_LOGI = SVM_LOGIC(data_dir=data_dir,
                            working_file_name=working_file_name,
@@ -182,7 +331,8 @@ def main():
                            log_file_name = Path('LOGISTIC_log.csv'),
                            model_type='LOGISTIC')
 
-    model_SVM.train(C_list=(2, 3))
+    
+    model_SVM.train(C_list=np.arange(1, 10))
     model_LOGI.train(C_list=(2, 3))
 
 if __name__ == '__main__':
