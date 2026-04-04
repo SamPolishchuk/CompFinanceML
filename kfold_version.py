@@ -18,7 +18,7 @@ from sklearn.metrics import f1_score, roc_auc_score, classification_report
 # =============================================================================
 # CELL 2 — LOAD & PREPROCESS  (same as your existing notebook)
 # =============================================================================
-df = pd.read_csv('startup data.csv')
+df = pd.read_csv('/Users/Matthew/Desktop/repositories/ml/CompFinanceML/data/startup_data.csv')
 
 drop_cols = [
     'Unnamed: 0', 'Unnamed: 6', 'id', 'object_id', 'name',
@@ -251,3 +251,8 @@ for name, (model, X_tr_, X_te_) in all_final_models.items():
     print(classification_report(y_test, y_pred, target_names=['Closed', 'Acquired']))
     print(f"F1 Macro : {f1_score(y_test, y_pred, average='macro'):.4f}")
     print(f"ROC-AUC  : {roc_auc_score(y_test, y_prob):.4f}")
+    confusion = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted'])
+    sns.heatmap(confusion, annot=True, fmt='d', cmap='Blues', cbar=False)
+    plt.title(f'Confusion Matrix — {name}')
+    plt.show()
+
