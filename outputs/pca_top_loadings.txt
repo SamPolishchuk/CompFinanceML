@@ -1,0 +1,75 @@
+PC1 top positive loadings
+num__age_last_milestone_year     0.383565
+num__age_first_milestone_year    0.345335
+num__age_last_funding_year       0.310739
+num__funding_rounds              0.298454
+num__relationships               0.279820
+num__has_roundb                  0.261395
+num__has_roundc                  0.253928
+num__is_top500                   0.245010
+num__milestones                  0.217091
+num__has_roundd                  0.199120
+
+PC1 top negative loadings
+num__has_angel        -0.186493
+num__is_otherstate    -0.123437
+num__longitude        -0.103779
+num__is_ny            -0.078543
+num__is_ecommerce     -0.067861
+num__latitude         -0.053437
+num__is_web           -0.032103
+num__is_gamesvideo    -0.028509
+num__is_advertising   -0.022260
+num__is_tx            -0.008255
+
+
+PC2 top positive loadings
+num__age_first_funding_year    0.414952
+num__age_last_funding_year     0.364647
+num__has_vc                    0.206967
+num__is_biotech                0.154881
+num__is_software               0.150388
+num__is_othercategory          0.148983
+num__is_otherstate             0.146483
+num__has_roundd                0.092995
+num__is_ma                     0.075596
+num__has_roundc                0.072783
+
+PC2 top negative loadings
+num__milestones       -0.396563
+num__has_milestone    -0.302264
+num__has_rounda       -0.252015
+num__relationships    -0.241296
+num__has_angel        -0.235070
+num__is_web           -0.210865
+num__is_ny            -0.132542
+num__is_gamesvideo    -0.112313
+num__is_ca            -0.087778
+num__is_advertising   -0.086944
+
+
+PC3 top positive loadings
+num__is_ca                     0.520162
+num__is_othercategory          0.100559
+num__is_tx                     0.056610
+num__age_first_funding_year    0.039404
+num__is_gamesvideo             0.034424
+num__avg_participants          0.033081
+num__is_biotech                0.020143
+num__is_top500                -0.000462
+num__is_software              -0.007071
+num__has_rounda               -0.013199
+
+PC3 top negative loadings
+num__longitude                 -0.511727
+num__latitude                  -0.396268
+num__is_ma                     -0.303732
+num__is_otherstate             -0.257769
+num__is_ny                     -0.250079
+num__funding_rounds            -0.131525
+num__milestones                -0.107390
+num__has_milestone             -0.090565
+num__is_mobile                 -0.077843
+num__age_last_milestone_year   -0.073072
+
+
