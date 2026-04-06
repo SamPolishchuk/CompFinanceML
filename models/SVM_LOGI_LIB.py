@@ -33,7 +33,9 @@ class SVM_LOGIC:
                  log_dir: Path,
                  log_file_name: Path,
                  visual_dir: Path = Path("outputs") / "SVM_LOGI",
-                 model_type: str = 'SVM'):
+                 model_type: str = 'SVM',
+                 svm_kernel_type: str = 'linear'
+                 ):
         self.__data_dir = data_dir
         self.__log_dir = log_dir
         self.__working_file = data_dir / working_file_name
@@ -46,20 +48,55 @@ class SVM_LOGIC:
         self.__scaler = StandardScaler()
         self.__output_dir = base_dir / visual_dir
         self.__output_dir.mkdir(parents=True, exist_ok=True)
+        self.__svm_kernel_type = svm_kernel_type
     
     # def set_cat_list(self, cat_list):
     #     self.__cat_list = cat_list
-
+    
     def __get_model(self, C: float):
-
+        
         if self.__model_type == 'SVM':
-            return SVC(C=C, class_weight='balanced', probability=True, random_state=1)
+            
+            if self.__svm_kernel_type == 'linear':
+                return SVC(
+                        C=C,
+                        kernel='linear',
+                        class_weight='balanced',
+                        probability=True,
+                        random_state=1
+                )
+            
+            elif self.__svm_kernel_type == 'rbf':
+                return SVC(
+                        C=C,
+                        kernel='rbf',
+                        gamma='scale',  # important
+                        class_weight='balanced',
+                        probability=True,
+                        random_state=1
+                )
+            
+            elif self.__svm_kernel_type == 'poly':
+                return SVC(
+                        C=C,
+                        kernel='poly',
+                        degree=3,
+                        coef0=1,
+                        class_weight='balanced',
+                        probability=True,
+                        random_state=1
+                )
+            
+            else:
+                raise ValueError(f"Unknown kernel: {self.__svm_kernel_type}")
         
         elif self.__model_type == 'LOGISTIC':
-            return LogisticRegression(C=C,
-                                      class_weight='balanced',
-                                      max_iter=1000,
-                                      random_state=1)
+            return LogisticRegression(
+                    C=C,
+                    class_weight='balanced',
+                    max_iter=1000,
+                    random_state=1
+            )
         return None
 
 
@@ -133,6 +170,9 @@ class SVM_LOGIC:
         
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        kernel_tag = f"_{self.__svm_kernel_type}" if self.__model_type == "SVM" else ""
+        model_tag = f"{self.__model_type}_{kernel_tag}"
+        
         best_C, best_score = None, -np.inf
         
         best_model = None
@@ -182,6 +222,53 @@ class SVM_LOGIC:
         print(f'Test score : {test_score:.4f}')
         print("\n==============================\n")
         
+        # ---- ROC: TRAIN vs TEST ----
+        if hasattr(model, "predict_proba"):
+            y_train_prob = model.predict_proba(X_train)[:, 1]
+            y_test_prob = model.predict_proba(X_test)[:, 1]
+            
+            train_auc = roc_auc_score(y_train, y_train_prob)
+            test_auc = roc_auc_score(y_test, y_test_prob)
+            
+            print(f"Train AUC: {train_auc:.4f}")
+            print(f"Test  AUC: {test_auc:.4f}")
+            
+            fig, ax = plt.subplots(figsize=(6, 5))
+            
+            # ---- TRAIN ----
+            RocCurveDisplay.from_predictions(
+                    y_train, y_train_prob,
+                    ax=ax,
+                    name=f"Train",
+                    color="blue",
+                    linestyle="-",
+                    linewidth=2
+            )
+            
+            # ---- TEST ----
+            RocCurveDisplay.from_predictions(
+                    y_test, y_test_prob,
+                    ax=ax,
+                    name=f"Test",
+                    color="red",
+                    linestyle="--",
+                    linewidth=2
+            )
+            
+            # ---- RANDOM BASELINE ----
+            ax.plot([0, 1], [0, 1], color="gray", linestyle=":", label="Random")
+            
+            ax.set_title(f"{self.__model_type} ROC Curve (Train vs Test)", fontsize=16)
+            ax.set_xlabel("False Positive Rate", fontsize=16)
+            ax.set_ylabel("True Positive Rate", fontsize=16)
+            
+            ax.legend(loc="lower right")
+            ax.grid(True)
+            
+            plt.tight_layout()
+            plt.savefig(self.__output_dir / f"{model_tag}_roc_train_test.pdf", dpi=300)
+            plt.close()
+        
         # ---- VISUAL EVALUATION ----
         self.__evaluate_and_plot(model, X_test, y_test)
         
@@ -195,14 +282,30 @@ class SVM_LOGIC:
         
         pd.DataFrame([results]).to_csv(self.__output_dir / f"{self.__model_type}_results.csv", index=False)
         
-        
-        
-        if self.__model_type == 'LOGISTIC':
+        if self.__model_type == 'SVM' and self.__svm_kernel_type == 'linear':
             coef = model.coef_[0]
+            print(f'Top SVM Features (Linear):\n{coef}')
             importance = pd.Series(coef, index=self.__feature_names)
             importance = importance.sort_values(key=abs, ascending=False)
             
-            print("\n===== Top Features =====")
+            print("\n===== Top SVM Features =====")
+            print(importance.head(15))
+            
+            plt.figure(figsize=(6, 4))
+            importance.head(15).plot(kind='barh')
+            plt.gca().invert_yaxis()
+            plt.title("Top SVM Features (Linear)")
+            plt.tight_layout()
+            plt.savefig(self.__output_dir / "svm_feature_importance.pdf", dpi=300)
+            plt.close()
+        
+        if self.__model_type == 'LOGISTIC':
+            coef = model.coef_[0]
+            print(f'Top LOGISTIC Features (Linear):\n{coef}')
+            importance = pd.Series(coef, index=self.__feature_names)
+            importance = importance.sort_values(key=abs, ascending=False)
+            
+            print("\n===== Top LOGISTIC Features =====")
             print(importance.head(15))
             
             plt.figure(figsize=(6, 4))
@@ -240,6 +343,8 @@ class SVM_LOGIC:
         print(f"\nLog saved to: {self.__log_file}")
     
     def __evaluate_and_plot(self, model, X_test, y_test):
+        kernel_tag = f"_{self.__svm_kernel_type}" if self.__model_type == "SVM" else ""
+        model_tag = f"{self.__model_type}{kernel_tag}"
         
         y_pred = model.predict(X_test)
         
@@ -265,7 +370,7 @@ class SVM_LOGIC:
             PrecisionRecallDisplay.from_predictions(y_test, y_prob)
             plt.title(f"{self.__model_type} Precision-Recall Curve")
             plt.grid()
-            plt.savefig(self.__output_dir / f"{self.__model_type}_pr_curve.pdf", dpi=300)
+            plt.savefig(self.__output_dir / f"{model_tag}_pr_curve.pdf", dpi=300)
             plt.close()
             
         
@@ -285,9 +390,9 @@ class SVM_LOGIC:
         
         plt.xlabel("Predicted")
         plt.ylabel("Actual")
-        plt.title(f"{self.__model_type} Confusion Matrix")
+        plt.title(f"{model_tag} Confusion Matrix")
         plt.tight_layout()
-        plt.savefig(self.__output_dir / f"{self.__model_type}_cm.pdf", dpi=300)
+        plt.savefig(self.__output_dir / f"{model_tag}_cm.pdf", dpi=300)
         plt.close()
         
         
@@ -297,9 +402,9 @@ class SVM_LOGIC:
         if y_prob is not None:
             plt.figure(figsize=(5, 4))
             RocCurveDisplay.from_predictions(y_test, y_prob)
-            plt.title(f"{self.__model_type} ROC Curve")
+            plt.title(f"{model_tag} ROC Curve")
             plt.grid()
-            plt.savefig(self.__output_dir / f"{self.__model_type}_roc.pdf", dpi=300)
+            plt.savefig(self.__output_dir / f"{model_tag}_roc.pdf", dpi=300)
             plt.close()
         
         report = classification_report(
@@ -307,7 +412,7 @@ class SVM_LOGIC:
                 target_names=['closed', 'acquired']
         )
         
-        with open(self.__output_dir / f"{self.__model_type}_report.txt", "w") as f:
+        with open(self.__output_dir / f"{model_tag}_report.txt", "w") as f:
             f.write(report)
 
 
